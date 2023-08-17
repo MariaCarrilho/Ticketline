@@ -1,13 +1,11 @@
-package pd.springboot.ticketlineserver.repository;
+package pd.ticketline.server.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import pd.springboot.ticketlineserver.entity.UserEntity;
+import org.springframework.stereotype.Repository;
+import pd.ticketline.server.model.User;
 
-import java.util.List;
-
-public interface UserRepository extends JpaRepository<UserEntity, Integer> {
-    @Query(value = "SELECT * FROM utilizador WHERE name = 'name'", nativeQuery = true)
-    List<UserEntity> findByName(@Param("name") String name);
+@Repository
+public interface UserRepository extends JpaRepository<User, String> {
+    User findByUsername(@Param("username") String username);
 }
