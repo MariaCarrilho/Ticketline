@@ -1,5 +1,6 @@
 package pd.ticketline.client.logic;
 
+import pd.ticketline.client.ui.ManagementUI;
 import pd.ticketline.utils.UnbookedReservations;
 
 import java.io.*;
@@ -7,9 +8,9 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 
 public class WaitNotification implements Runnable {
-    private String serverIP;
-    private int port;
-    static boolean active = true;
+    private final String serverIP;
+    private final int port;
+    public static boolean active = true;
 
     public WaitNotification(String serverIP, int port) {
         this.serverIP = serverIP;
@@ -27,6 +28,11 @@ public class WaitNotification implements Runnable {
                     Object receivedObject = ois.readObject();
                     if (receivedObject instanceof String response) {
                         System.out.println(response);
+                        if(response.equals("Server was terminated.")){
+                            active = false;
+                            ManagementUI.close();
+
+                        }
                         if(response.equals("Este lugar está indisponível."))
                             APIRequests.unbookedReservations.remove(unbooked);
 
@@ -42,7 +48,7 @@ public class WaitNotification implements Runnable {
 
             clientSocket.close();
             System.out.println("Connection closed.");
-        } catch (IOException | ClassNotFoundException e) {
+        } catch (IOException | ClassNotFoundException | InterruptedException e) {
             throw new RuntimeException(e);
         }
     }

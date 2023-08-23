@@ -12,27 +12,45 @@ import pd.ticketline.utils.EditUser;
 import pd.ticketline.utils.JWTUtil;
 import pd.ticketline.utils.LoginUser;
 
-@RestController
-public class UserController {
-     @Autowired
-    private UserService userService;
+import java.util.List;
 
-    @RequestMapping(value = "/auth", method = RequestMethod.POST)
+@RestController
+@RequestMapping("/users")
+public class UserController {
+    private final UserService userService;
+    @Autowired
+    public UserController(UserService userService){
+        this.userService = userService;
+    }
+
+    @GetMapping
+    public List<User> getAllUsers(HttpServletRequest request){
+        if(JWTUtil.isTokenValid(request))
+            return userService.getAllUsers();
+        else throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
+    }
+
+    @PostMapping("/auth")
     public Auth auth(@RequestBody LoginUser auth) {
         return userService.auth(auth);
     }
-    @RequestMapping(value = "/user/add", method = RequestMethod.POST)
-    public String createUser(@RequestBody User user) {
+    @PostMapping("/add")
+    public User createUser(@RequestBody User user) {
             return userService.addUser(user);
     }
-    @RequestMapping(value = "/user/update", method = RequestMethod.PUT)
-    public String editUser(@RequestBody EditUser user, HttpServletRequest request) {
+    @PutMapping
+    public User editUser(@RequestBody EditUser user, HttpServletRequest request) {
         if(JWTUtil.isTokenValid(request))
             return userService.editUser(user, request);
         throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
-
     }
 
+    @DeleteMapping("{username}")
+    public void deleteUser(@PathVariable String username, HttpServletRequest request) {
+        if(JWTUtil.isTokenValid(request))
+             userService.deleteUser(username);
+        else throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
+    }
 
 
 

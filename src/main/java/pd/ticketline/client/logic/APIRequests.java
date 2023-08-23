@@ -1,25 +1,20 @@
 package pd.ticketline.client.logic;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
-
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.json.JSONException;
 import org.json.JSONObject;
-import pd.ticketline.utils.UnbookedReservations;
+import org.springframework.http.*;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
+import pd.ticketline.server.model.Reservation;
+import pd.ticketline.server.model.User;
+import pd.ticketline.utils.*;
 import pd.ticketline.server.model.Show;
 import pd.ticketline.server.model.Sit;
-import pd.ticketline.utils.BookSit;
-import pd.ticketline.utils.EditUser;
-import pd.ticketline.utils.Search;
-
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Objects;
 
 public class APIRequests {
     private static String apiUrl;
@@ -27,182 +22,235 @@ public class APIRequests {
     private String token;
     private boolean admin;
     private Thread waitNotification;
-    private String username;
     public final static ArrayList<UnbookedReservations> unbookedReservations = new ArrayList<>();
-
+    private final RestTemplate restTemplate;
 
     public APIRequests(String serverIP) {
+        this.restTemplate = new RestTemplate();
         APIRequests.serverIp = serverIP;
         APIRequests.apiUrl = "http://"+serverIP+":8080";
     }
 
-    public String getConnectionResponse(String jsonInput, String endpoint, String req, boolean auth, String token) throws Exception {
-        HttpURLConnection con = postConnection(jsonInput, endpoint, req, auth, token);
-        int statusCode = con.getResponseCode();
-        if(statusCode==401){
+    public boolean isServerAlive(){
+        int timeout = 3000;
+        try {
+            URL url = new URL(apiUrl);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(timeout);
+            connection.setRequestMethod("GET");
+
+            int responseCode = connection.getResponseCode();
+            return true;
+        } catch (IOException e) {
+            System.out.println("Server is not running. Goodbye!");
+            return false;
+        }
+    }
+
+    private String parseJSon(Exception e) throws Exception {
+        int startIndex = e.getMessage().indexOf('{');
+        String jsonPart = e.getMessage().substring(startIndex);
+        JSONObject jsonObject = new JSONObject(jsonPart);
+        String msg = jsonObject.getString("message");
+        if(msg.equals("Invalid or expired token."))
             throw new Exception("Token expired, login again.");
-        }
-        else if (statusCode == 200 && !req.equals("DELETE")) {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(con.getInputStream()))) {
-                String responseBody = reader.readLine();
-                return responseBody.trim();
-            }
-        } else{
-            try (BufferedReader errorReader = new BufferedReader(new InputStreamReader(con.getErrorStream()))) {
-                JSONObject errorJson = new JSONObject(errorReader.readLine());
-                return errorJson.getString("message");
-
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
+        else if(msg.equals("This user was deleted."))
+            throw new Exception(msg);
+        return jsonObject.getString("message");
     }
-    private static HttpURLConnection postConnection(String jsonInput, String endpoint, String req, boolean auth, String token) throws IOException {
-        String reqUrl = apiUrl + endpoint;
-        URL url = new URL(reqUrl);
-        HttpURLConnection con = (HttpURLConnection) url.openConnection();
-        con.setRequestMethod(req);
-        con.setRequestProperty("Content-Type", "application/json");
-        con.setRequestProperty("Accept", "application/json");
-        con.setDoOutput(true);
-        if(auth){
-            String authorization = "Bearer " + token;
-            con.setRequestProperty("Authorization", authorization);
-        }
-        if(req.equals("POST") || req.equals("PUT")) {
-            try (OutputStream os = con.getOutputStream()) {
-                byte[] input = jsonInput.getBytes(StandardCharsets.UTF_8);
-                os.write(input, 0, input.length);
-            }
-        }
-        con.connect();
-        return con;
+    private HttpHeaders getAuthorizationHeader(){
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer "+token);
+        return headers;
     }
 
-    public String auth(String username, String password, String token) throws Exception {
-        String jsonInput = "{ \"username\": \"" +  username + "\", \"password\": \"" + password + "\" }";
-
-        String responseBody = getConnectionResponse(jsonInput, "/auth", "POST", false, token);
+    public String auth(String username, String password) throws Exception {
+        LoginUser loginUser = new LoginUser(username, password);
         try{
-            JSONObject jsonObject = new JSONObject(responseBody);
-            this.token = jsonObject.getString("token");
-            this.admin = jsonObject.getBoolean("admin");
-            this.username = username;
+            Auth auth = restTemplate.postForObject(apiUrl+"/users/auth",loginUser, Auth.class);
+            this.token = auth.getToken();
+            this.admin = auth.isAdmin();
             return "You are now authenticated!";
-        }catch (Exception e){
-            return responseBody;
+        }catch (HttpClientErrorException e){
+            return parseJSon(e);
         }
-
     }
 
-    public String getTCPPort(String token) throws Exception {
-
-        String port = getConnectionResponse(null, "/getPort", "GET", true, token);
-        if(port.length()>5)
-            return "Unable to connect to TCP port";
-        else{
+    public void getTCPPort() {
+        HttpHeaders headers = getAuthorizationHeader();
+        ResponseEntity<String> response = restTemplate.exchange(apiUrl+ "/getPort", HttpMethod.GET,new HttpEntity<>(headers),String.class);
+        String port = response.getBody();
+        try {
             this.waitNotification = new Thread(new WaitNotification(serverIp, Integer.parseInt(port)));
             this.waitNotification.start();
-            return "Ready to receive notifications";
+            WaitNotification.active = true;
+        }catch (Exception e){
+            System.out.println(e.getMessage());
         }
 
     }
 
     public String adicUser(String name ,String username, String password) throws Exception {
-            String jsonInput = "{ \"username\": \"" +  username + "\", \"password\": \"" + password + "\", \"name\": \"" + name + "\" }";
-            return getConnectionResponse(jsonInput, "/user/add", "POST", false, null);
+        User user = new User(username, name, password);
+        try {
+            user = restTemplate.postForObject(apiUrl + "/users/add", user, User.class);
+            return user.toString();
+        }catch (Exception e){
+            return parseJSon(e);
+        }
     }
 
     public String editUser(EditUser user) throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        String object = mapper.writeValueAsString(user);
-        return this.getConnectionResponse(object, "/user/update", "PUT", true, token);
+        HttpHeaders headers = getAuthorizationHeader();
+        try{
+            ResponseEntity<User> response = restTemplate.exchange(apiUrl+ "/users", HttpMethod.PUT,new HttpEntity<>(user, headers),User.class);
+            return response.getBody().toString();
+        }catch (Exception e){
+            return parseJSon(e);
+        }
     }
     public String editShow(Show show) throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        String object = mapper.writeValueAsString(show);
-        return this.getConnectionResponse(object, "/shows", "PUT", true, token);
-    }
-    public Integer adicShow(Show showInfo) throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        String object = mapper.writeValueAsString(showInfo);
-        String responseBody = this.getConnectionResponse(object, "/shows/add", "POST", true, token);
+        HttpHeaders headers = getAuthorizationHeader();
         try{
-            JSONObject jsonObject = new JSONObject(responseBody);
-            return jsonObject.getInt("id");
-        } catch (JSONException e) {
+            System.out.println(show.toString());
+            ResponseEntity<Show> response = restTemplate.exchange(apiUrl+ "/shows", HttpMethod.PUT,new HttpEntity<>(show, headers),Show.class);
+            return response.getBody().toString();
+        }catch (Exception e){
+            return parseJSon(e);
+        }
+    }
+
+    public Integer adicShow(Show showInfo) throws Exception {
+        HttpHeaders headers = getAuthorizationHeader();
+        try{
+            ResponseEntity<Show> response = restTemplate.exchange(apiUrl+ "/shows/add", HttpMethod.POST,new HttpEntity<>(showInfo, headers),Show.class);
+            return response.getBody().getId();
+        }catch (Exception e){
+            System.out.println(parseJSon(e));
             return -1;
+        }
+    }
+    public String deleteShow(int id) throws Exception {
+        HttpHeaders headers = getAuthorizationHeader();
+        try{
+            restTemplate.exchange(apiUrl+ "/shows/"+id, HttpMethod.DELETE,new HttpEntity<>(headers),Show.class);
+            return "Show with id " + id + " deleted.";
+        }catch (Exception e){
+            return parseJSon(e);
+        }
+    }
+
+    public String deleteUser(String username) throws Exception {
+        HttpHeaders headers = getAuthorizationHeader();
+        try{
+            restTemplate.exchange(apiUrl+ "/users/"+username, HttpMethod.DELETE , new HttpEntity<>(headers), User.class);
+            return "User with username " + username + " deleted.";
+        }catch (Exception e){
+            return parseJSon(e);
         }
     }
 
     public void adicSit(Sit sit) throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        String object = mapper.writeValueAsString(sit);
-
-        getConnectionResponse(object, "/sit/add", "POST", true, token);
-    }
-
-    public String deleteShow(int id) throws Exception {
-        return getConnectionResponse(null, "/shows/" + id, "DELETE", true, token);
+        HttpHeaders headers = getAuthorizationHeader();
+        try{
+            restTemplate.exchange(apiUrl+ "/sits/add", HttpMethod.POST,new HttpEntity<>(sit, headers),Sit.class);
+        }catch (Exception e){
+            System.out.println(parseJSon(e));
+        }
     }
 
     public String deleteUnpaidReservation(int id) throws Exception {
-        return getConnectionResponse(null, "/reservation/" + id, "DELETE", true, token);
-
+        HttpHeaders headers = getAuthorizationHeader();
+        try{
+            restTemplate.exchange(apiUrl+ "/reservations/"+id, HttpMethod.DELETE,new HttpEntity<>(headers),Show.class);
+            return "Reserva com id " + id + "apagada.";
+        }catch (Exception e){
+            return parseJSon(e);
+        }
     }
 
     public ArrayList<Show> getShows() throws Exception {
-
-        String responseBody = getConnectionResponse(null, "/shows", "GET", false, null);
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(responseBody, new TypeReference<>() {});
+        try {
+            return new ArrayList<>(Arrays.asList(restTemplate.getForObject(apiUrl+ "/shows",Show[].class)));
+        }catch (Exception e){
+            System.out.println(parseJSon(e));
+            return new ArrayList<>();
+        }
     }
 
-    public ArrayList<Sit> getSits(int id) throws Exception {
-        String responseBody = getConnectionResponse(null, "/sits/"+id, "GET", true, token);
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(responseBody, new TypeReference<>() {});
+    public ArrayList<Sit> getSits(int id) {
+        HttpHeaders headers = getAuthorizationHeader();
+        try {
+            ResponseEntity<Sit[]> responseEntity = restTemplate.exchange(apiUrl+ "/sits/"+id,HttpMethod.GET, new HttpEntity<>(headers) ,Sit[].class);
+            return new ArrayList<>(Arrays.asList(responseEntity.getBody()));
+
+        }catch (Exception e){
+            return new ArrayList<>();
+        }
     }
 
-    public ArrayList<Show> getCriteriaShows(Search search) throws Exception {
-        String responseBody = getConnectionResponse(null, "/shows/"+search.getCriterio()+"/"+search.getPesquisa(), "GET", false, null);
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(responseBody, new TypeReference<>() {});
+    public ArrayList<Show> getCriteriaShows(Search search){
+        try {
+            return new ArrayList<>(Arrays.asList(Objects.requireNonNull(restTemplate.getForObject(apiUrl + "/shows/" + search.getCriterio() + "/" + search.getPesquisa(), Show[].class))));
+        }catch (Exception e){
+            return new ArrayList<>();
+        }
     }
 
-    public String[] checkUnpaidReservations() throws Exception {
-        return getConnectionResponse(null, "/reservation/unpaid", "GET", true, token).replace("\"","")
-                .replace("[", "").replace("]", "").split(",");
+    public ArrayList<Reservation> checkUnpaidReservations() throws Exception {
+        try{
+            HttpHeaders headers = getAuthorizationHeader();
+            ResponseEntity<Reservation[]> response = restTemplate.exchange(
+                apiUrl + "/reservations/unpaid",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                Reservation[].class);
+            return new ArrayList<>(Arrays.asList(Objects.requireNonNull(response.getBody())));
+        }catch (Exception e){
+            System.out.println(parseJSon(e));
+            return new ArrayList<>();
+        }
     }
 
-    public String[] checkPaidReservations() throws Exception {
-        return getConnectionResponse(null, "/reservation/paid", "GET", true, token).replace("\"","")
-                .replace("[", "").replace("]", "").split(",");
+    public ArrayList<Reservation> checkPaidReservations() throws Exception {
+        try{
+            HttpHeaders headers = getAuthorizationHeader();
+            ResponseEntity<Reservation[]> response = restTemplate.exchange(
+                apiUrl + "/reservations/paid",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                Reservation[].class);
+        return new  ArrayList<>(Arrays.asList(Objects.requireNonNull(response.getBody())));
+    }catch (Exception e){
+        System.out.println(parseJSon(e));
+        return new ArrayList<>();
     }
+    }
+
 
     public String payReservation(int id) throws Exception {
-        return getConnectionResponse(null, "/reservation/" +id, "GET", true, token);
+        HttpHeaders headers = getAuthorizationHeader();
+        try{
+            ResponseEntity<Reservation> response = restTemplate.exchange(apiUrl+ "/reservations/"+id, HttpMethod.GET,new HttpEntity<>(headers), Reservation.class);
+            return response.getBody().toString() + " foi paga.";
+        }catch (Exception e){
+            return parseJSon(e);
+        }
+
     }
 
     public String bookSit(BookSit bookSit) throws Exception{
-        ObjectMapper mapper = new ObjectMapper();
-        String object = mapper.writeValueAsString(bookSit);
-
-        return getConnectionResponse(object, "/reservation", "POST", true, token);
+        HttpHeaders headers = getAuthorizationHeader();
+        try {
+            ResponseEntity<Reservation> response = restTemplate.exchange(apiUrl+ "/reservations", HttpMethod.POST,new HttpEntity<>(bookSit,headers), Reservation.class);
+            return response.getBody().toString();
+        }catch (Exception e){
+            return parseJSon(e);
+        }
     }
-
-
 
     public boolean isAdmin() {
         return admin;
-    }
-
-    public String getToken() {
-        return token;
-    }
-
-    public String getUsername() {
-        return username;
     }
 
     public void endThread() throws InterruptedException {
@@ -210,4 +258,13 @@ public class APIRequests {
         this.waitNotification.join();
     }
 
+    public ArrayList<User> getAllUsers() throws Exception {
+        HttpHeaders headers = getAuthorizationHeader();
+        try {
+            return new ArrayList<>(Arrays.asList(restTemplate.exchange(apiUrl+ "/users", HttpMethod.GET ,new HttpEntity<>(headers), User[].class).getBody()));
+        }catch (Exception e){
+            System.out.println(parseJSon(e));
+            return new ArrayList<>();
+        }
+    }
 }

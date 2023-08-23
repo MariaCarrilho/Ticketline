@@ -8,6 +8,7 @@ import pd.ticketline.server.model.User;
 
 import java.util.List;
 
+
 @Repository
 public interface ReservationRepository extends JpaRepository<Reservation, Integer> {
 

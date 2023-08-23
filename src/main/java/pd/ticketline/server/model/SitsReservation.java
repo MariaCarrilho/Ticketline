@@ -30,4 +30,12 @@ public class SitsReservation {
                 ", reservation=" + reservation +
                 '}';
     }
+
+    public Sit getSit() {
+        return sit;
+    }
+
+    public Reservation getReservation() {
+        return reservation;
+    }
 }

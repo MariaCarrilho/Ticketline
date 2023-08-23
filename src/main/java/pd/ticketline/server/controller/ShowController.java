@@ -18,20 +18,22 @@ import java.util.List;
 
 public class ShowController {
     private final ShowService showService;
+    private final TCPServer tcpServer;
     @Autowired
     public ShowController(ShowService showService) {
         this.showService = showService;
+        this.tcpServer = new TCPServer();
     }
     @PostMapping("add")
     public Show createShow(@RequestBody Show show, HttpServletRequest request) throws IOException {
         if(JWTUtil.isTokenValid(request)) {
             Show show1 =  showService.addShow(show);
-            TCPServer.sendMessageToAllClients("A show was inserted.");
+            tcpServer.sendMessageToAllClients("A show was inserted.");
             return show1;
         }
         throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
     }
-    @GetMapping()
+    @GetMapping
     public List<Show> getAllShows() {
         return showService.getAllShows();
     }
@@ -44,20 +46,18 @@ public class ShowController {
     public void deleteShow(@PathVariable Integer id, HttpServletRequest request) throws IOException {
         if(JWTUtil.isTokenValid(request)) {
             showService.deleteShow(id);
-            TCPServer.sendMessageToAllClients("A show was deleted.");
+            tcpServer.sendMessageToAllClients("A show was deleted.");
         }else
             throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
 
     }
-    @PutMapping()
+    @PutMapping
     public Show editShow(@RequestBody Show showEntity, HttpServletRequest request) throws IOException {
         if(JWTUtil.isTokenValid(request)) {
             Show show = showService.editShow(showEntity);
-            TCPServer.sendMessageToAllClients("A show was altered.");
+            tcpServer.sendMessageToAllClients("A show was altered.");
             return show;
         }else
             throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
-
     }
-
 }

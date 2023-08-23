@@ -1,13 +1,18 @@
 package pd.ticketline.client.ui;
 
+import org.json.JSONException;
 import pd.ticketline.client.logic.APIRequests;
 import pd.ticketline.client.logic.ReadFile;
+import pd.ticketline.server.model.Reservation;
+import pd.ticketline.server.model.User;
 import pd.ticketline.utils.UnbookedReservations;
 import pd.ticketline.server.model.Show;
 import pd.ticketline.server.model.Sit;
 import pd.ticketline.utils.BookSit;
 import pd.ticketline.utils.EditUser;
 import pd.ticketline.utils.Search;
+
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -17,12 +22,16 @@ import java.util.regex.Pattern;
 
 public class ManagementUI {
 
-    private boolean finish = false;
-    private boolean auth = false;
+    private static boolean finish = false;
+    private static boolean auth = false;
     private final APIRequests apiRequests;
 
     public ManagementUI(String apiURL) {
         this.apiRequests = new APIRequests(apiURL);
+    }
+
+    public boolean isServerAlive() {
+        return this.apiRequests.isServerAlive();
     }
 
     public void init() throws Exception {
@@ -66,21 +75,20 @@ public class ManagementUI {
 
         while(auth) {
             switch (Input.chooseOption("======== Menu Administrador ========","Consultar Espetáculo",
-                    "Inserir Espetáculo", "Alterar Espetáculo","Apagar Espetáculo", "Sair")) {
+                    "Inserir Espetáculo", "Alterar Espetáculo","Apagar Espetáculo", "Apagar Utilizador" ,"Sair")) {
                 case 1 -> consShow(); // consultar espetaculos
                 case 2 -> insertShow();
                 case 3 -> alterShow();
                 case 4 -> deleteShow();
-                case 5 -> logout();
+                case 5 -> deleteUsers();
+                case 6 -> logout();
             }
         }
     }
 
-
-
-    private void bookChoosenSits(){
+    private void bookChoosenSits() throws InterruptedException {
         try{
-            int i = 0;
+            int i = 1;
             if (APIRequests.unbookedReservations.isEmpty()) System.out.println("You have nothing in your cart.");
             else {
                 for (UnbookedReservations unbooked : APIRequests.unbookedReservations) {
@@ -90,22 +98,24 @@ public class ManagementUI {
                 String reserva = Input.readString("Reservar? ", true);
                 if (reserva.equals("sim")) {
                     int id = Input.readInt("Número da Reserva: ");
+                    if(id>i || id<1) {
+                        System.out.println("There's no reservation with this number.");
+                        return;
+                    }
                     SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm");
                     String formattedDate = dateFormat.format(new Date());
-                    BookSit bookSit = new BookSit(APIRequests.unbookedReservations.get(id).getFila(), APIRequests.unbookedReservations.get(id).getAssento(), APIRequests.unbookedReservations.get(id).getShow_id(), formattedDate);
+                    BookSit bookSit = new BookSit(APIRequests.unbookedReservations.get(id-1).getFila(), APIRequests.unbookedReservations.get(id-1).getAssento(), APIRequests.unbookedReservations.get(id-1).getShow_id(), formattedDate);
                     System.out.println(this.apiRequests.bookSit(bookSit));
-                    APIRequests.unbookedReservations.remove(id);
+                    APIRequests.unbookedReservations.remove(id-1);
                 }
             }
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
 
-    private void selectSits(){
+    private void selectSits() throws InterruptedException {
         try{
             List<Show> availableShows = checkAvailableShows();
 
@@ -113,6 +123,11 @@ public class ManagementUI {
             else {
                 for (Show entity : availableShows) System.out.println(entity);
                 int id = Input.readInt("Show id:");
+                Optional<Show> foundShow = this.apiRequests.getShows().stream().filter(show -> show.getId() == id).findFirst();
+                if (foundShow.isEmpty()) {
+                    System.out.println("A show with this id doesnt exist!");
+                    return;
+                }
                 ArrayList<Sit> sits = this.apiRequests.getSits(id);
                 String fila = "";
                 HashMap<String, ArrayList<String>> filaLugares = new HashMap<>();
@@ -133,7 +148,7 @@ public class ManagementUI {
                     String filaReservar = null;
                     String assentoReservar = null;
                     do {
-                        filaReservar = Input.readString("Fila:", true);
+                        filaReservar = Input.readString("Fila:", true).toUpperCase();
                     } while (!filaLugares.containsKey(filaReservar));
                     do {
                         assentoReservar = Input.readString("Assento:", true);
@@ -142,36 +157,32 @@ public class ManagementUI {
                 }
             }
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
 
 
     }
 
-    private void checkPaidReservations(){
+    private void checkPaidReservations() throws InterruptedException {
         try{
-            String[] parts = this.apiRequests.checkPaidReservations();
-            if (parts[0] == null || parts[0].trim().isEmpty()) System.out.println("You don't have paid bookings.");
+            ArrayList<Reservation> parts = this.apiRequests.checkPaidReservations();
+            if (parts.isEmpty()) System.out.println("You don't have paid bookings.");
             else {
-                for (String part : parts) System.out.println(part);
+                for (Reservation part : parts) System.out.println(part.toString());
             }
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
 
-    private void checkUnpaidReservations(){
+    private void checkUnpaidReservations() throws InterruptedException {
         try{
-            String[] parts = this.apiRequests.checkUnpaidReservations();
-            if (parts[0] == null || parts[0].trim().isEmpty()) System.out.println("You don't have unpaid bookings.");
+            ArrayList<Reservation> parts = this.apiRequests.checkUnpaidReservations();
+            if (parts.isEmpty()) System.out.println("You don't have unpaid bookings.");
             else {
-                for (String part : parts) System.out.println(part);
+                for (Reservation part : parts) System.out.println(part.toString());
                 switch (Input.chooseOption("======== Opções ========", "Eliminar Reserva",
                         "Pagar Reserva", "Cancelar")) {
                     case 1 -> deleteUnpaidReservation();
@@ -180,34 +191,28 @@ public class ManagementUI {
                 }
             }
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
 
-    private void deleteUnpaidReservation() {
+    private void deleteUnpaidReservation() throws InterruptedException {
         try{
             int id = Input.readInt("Id da Reserva:");
             System.out.println(this.apiRequests.deleteUnpaidReservation(id));
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
 
-    private void payReservation() {
+    private void payReservation() throws InterruptedException {
         try{
             int id = Input.readInt("Id da Reserva:");
             System.out.println(this.apiRequests.payReservation(id));
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
     private void editShowVisibility(){
@@ -216,21 +221,32 @@ public class ManagementUI {
 
             int id = Input.readInt("Show id:");
             Optional<Show> foundShow = this.apiRequests.getShows().stream().filter(show -> show.getId() == id).findFirst();
-            if (foundShow.isEmpty()) System.out.println("This show was deleted!");
+            if (foundShow.isEmpty()) System.out.println("A show with this id doesnt exist!");
             else {
                 Show show = new Show(foundShow.get());
-
                 show.setVisivel(show.getVisivel() == 0 ? 1 : 0);
-
                 System.out.println(this.apiRequests.editShow(show));
             }
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) auth=false;
         }
     }
+
+    private static boolean isValidDateTime(String dateTimeStr) {
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm");
+        dateFormat.setLenient(false);
+
+        try {
+            Date inputDateTime = dateFormat.parse(dateTimeStr);
+            Date currentDateTime = new Date();
+            if (inputDateTime.after(currentDateTime)) return true;
+            else return false;
+            } catch (ParseException e) {
+            return false;
+
+    }
+}
 
     private void editAllShowInfo(){
         try{
@@ -245,20 +261,21 @@ public class ManagementUI {
                 Optional<Show> foundShow = this.apiRequests.getShows().stream().filter(show -> show.getId() == finalId).findFirst();
                 if (foundShow.isEmpty()) System.out.println("This show id doesn't exist.\nPlease insert one of the numbers above.");
                 else break;
-            };
+            }
             String descricao = Input.readString("Descrição: ", false);
             String tipo = Input.readString("Tipo: ", false);
             Integer duracao = Input.readInt("Duração: ");
             while (true) {
                 dataHora = Input.readString("Data (Ex:12-12-2023 12:20): ", false);
                 Matcher dateMatcher = dateHourPattern.matcher(dataHora);
-                if (!dateMatcher.matches()) System.out.println("Invalid format!");
+
+                if (!dateMatcher.matches() || !isValidDateTime(dataHora)) System.out.println("Invalid format or date!");
                 else break;
             }
             String local = Input.readString("Local: ", false);
             String localidade = Input.readString("Localidade: ", false);
             String pais = Input.readString("País: ", false);
-            String classificacao_etaria = Input.readString("Classificação Etária: ", true);
+            int classificacao_etaria = Input.readInt("Classificação Etária: ");
             System.out.println("1 para visível; 0 para invisível");
             Integer visivel = Input.readInt("Visibilidade: ");
 
@@ -266,12 +283,29 @@ public class ManagementUI {
             String response = this.apiRequests.editShow(show);
             System.out.println(response);
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) auth=false;
         }
     }
+    private List<Show> checkAvailableShows() throws Exception {
+        List<Show> showList = this.apiRequests.getShows();
+        LocalDateTime currentDateTime = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+        List<Show> availableShows = new ArrayList<>();
+        for (Show entity : showList) {
+            if(entity.getVisivel()==1) {
+                LocalDateTime showDateTime = LocalDateTime.parse(entity.getData_hora(), formatter);
+                if (showDateTime.isAfter(currentDateTime) && showDateTime.minusHours(24).isAfter(currentDateTime))
+                    availableShows.add(entity);
+            }
+        }
+        return availableShows;
+    }
+    private int consAllShow() throws Exception {
+        System.out.println("These are the shows available:");
+        return showShows(this.apiRequests.getShows());
+    }
+
     public String criterioConsulta(){
         switch (Input.chooseOption("======== Critério de Consulta ========",
                 "Descrição","Tipo","Data/Hora","Duração","Local", "Localidade", "País", "Classificação Etária", "Todos")) {
@@ -322,23 +356,23 @@ public class ManagementUI {
             String username = Input.readString("Username: ",true);
             String password = Input.readString("Password: ",true);
             System.out.println();
-            System.out.println("Foi criado o utilizador " + apiRequests.adicUser(nome, username, password));
+            String response = apiRequests.adicUser(nome, username, password);
+            if(response.equals("User already exists or non-complete credentials.")) System.out.println(response);
+            else System.out.println("Foi criado o utilizador " + response);
         }
     }
     private void logout() throws InterruptedException {
         auth = false;
         this.apiRequests.endThread();
     }
-    private void editUser() {
+    private void editUser() throws InterruptedException {
         try{
             String name = Input.readString("Nome: ", false);
             String password = Input.readString("Password: ", true);
             System.out.println("Foi alterado o utilizador " + this.apiRequests.editUser(new EditUser(name, password)));
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
 
@@ -346,20 +380,16 @@ public class ManagementUI {
 
         String username = Input.readString("Username: ",true);
         String password = Input.readString("Password: ",true);
-        String response = apiRequests.auth(username, password, apiRequests.getToken());
+        String response = apiRequests.auth(username, password);
         System.out.println(response);
         if(response.equals("You are now authenticated!")) {
             auth = true;
-            apiRequests.getTCPPort(apiRequests.getToken());
+            apiRequests.getTCPPort();
             if(apiRequests.isAdmin()) adminOptions();
             else normalOptions();
         }
     }
 
-    private int consAllShow() throws Exception {
-        System.out.println("These are the shows available:");
-        return showShows(this.apiRequests.getShows());
-    }
     private int showShows(ArrayList<Show> showEntities){
         if (showEntities.isEmpty()){
             System.out.println("No shows found.");
@@ -379,42 +409,41 @@ public class ManagementUI {
             case 3 -> {}
         }
     }
-    private void insertShow() {
+    private void insertShow() throws InterruptedException {
         try{
             ReadFile readFile = new ReadFile(apiRequests);
             String fileName = Input.readString("Nome do Ficheiro: ", true);
             readFile.readShowInfo(fileName);
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                auth=false;
-            }
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
-    private void deleteShow(){
+    private void deleteShow() throws InterruptedException {
         try{
             if(consAllShow()==0) return;
             int id = Input.readInt("Show id:");
             System.out.println(this.apiRequests.deleteShow(id));
         }catch (Exception e){
-            if(e.getMessage().equals("Token expired, login again.")){
-                System.out.println(e.getMessage());
-                auth=false;
-            }
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
-    private List<Show> checkAvailableShows() throws Exception{
-        List<Show> showList = this.apiRequests.getShows();
-        LocalDateTime currentDateTime = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
-        List<Show> availableShows = new ArrayList<>();
-        for (Show entity : showList) {
-            if(entity.getVisivel()==1) {
-                LocalDateTime showDateTime = LocalDateTime.parse(entity.getData_hora(), formatter);
-                if (showDateTime.isAfter(currentDateTime) && showDateTime.minusHours(24).isAfter(currentDateTime))
-                    availableShows.add(entity);
-            }
+    private void deleteUsers() throws Exception {
+        ArrayList<User> allUsers = this.apiRequests.getAllUsers();
+        try{
+            if(allUsers.isEmpty()) return;
+            for(User user: allUsers) System.out.println(user.toString());
+            String username = Input.readString("Username:", true);
+            System.out.println(this.apiRequests.deleteUser(username));
+        }catch (Exception e){
+            System.out.println(e.getMessage());
+            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
-        return availableShows;
+    }
+
+    public static void close() throws InterruptedException {
+        finish=true;
+        auth=false;
     }
 
 }

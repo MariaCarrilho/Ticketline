@@ -1,6 +1,6 @@
 package pd.ticketline.server.rmiconnection;
 
-import pd.ticketline.rmi.BackupServiceRMI;
+import pd.ticketline.rmi.DatabaseListener;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -10,59 +10,47 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DatabaseBackupImpl extends UnicastRemoteObject implements  RemoteInterfaceServer {
-    private static final String LOCK_FILE = "transfer.lock";
-    private final BackupServiceRMI remoteRef;
 
-    private static List<BackupServiceRMI> list;
+public class DatabaseBackupImpl extends UnicastRemoteObject implements RemoteInterfaceServer {
 
+    private static List<DatabaseListener> list;
     private static String dbDir;
-    public DatabaseBackupImpl(String dbPath, BackupServiceRMI remoteRef) throws RemoteException {
+    public DatabaseBackupImpl(String dbPath) throws RemoteException {
         super();
-        this.remoteRef=remoteRef;
         dbDir =  dbPath;
         list = new ArrayList<>();
     }
 
     public DatabaseBackupImpl() throws RemoteException {
         super();
-        this.remoteRef=null;
     }
 
     @Override
-    public void getDatabase() throws IOException, SQLException {
-        File lockFile = new File(LOCK_FILE);
-        lockFile.createNewFile();
-
+    public byte[] getDatabase() throws IOException {
 
         File databaseFile = new File(dbDir);
-        byte[] databaseBytes = Files.readAllBytes(databaseFile.toPath());
-        remoteRef.createDBCopy(databaseBytes);
-
-        lockFile.delete();
-
+        return Files.readAllBytes(databaseFile.toPath());
     }
 
-    @Override
-    public void registerBackupService(BackupServiceRMI rmi) throws RemoteException {
+    public synchronized void registerBackupService(DatabaseListener rmi) throws RemoteException {
         System.out.println("Adding listener - " + rmi);
         list.add(rmi);
     }
 
-    @Override
-    public void unregisterBackupService(BackupServiceRMI rmi) throws RemoteException {
+    public synchronized void unregisterBackupService(DatabaseListener rmi) throws RemoteException {
         System.out.println("Removing listener - " + rmi);
         list.remove(rmi);
 
     }
 
-
-    @Override
-    public synchronized void updateDatabase(String query) {
-        notifyListeners(query);
+    public void unregisterAllServices() throws RemoteException {
+        for(int i =0; i<list.size();i++) {
+            unregisterBackupService(list.get(i));
+        }
     }
 
-    private synchronized void notifyListeners(String query) {
+    public synchronized void notifyListeners(String query) {
+        System.out.println(list.size());
         for(int i =0; i<list.size();i++){
             try{
                 list.get(i).databaseUpdated(query);
@@ -72,4 +60,5 @@ public class DatabaseBackupImpl extends UnicastRemoteObject implements  RemoteIn
             }
         }
     }
+
 }

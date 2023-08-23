@@ -14,12 +14,13 @@ public class Reservation {
     private String data_hora;
     @Column(nullable = false)
     private Integer pago;
-    @ManyToOne
-    @JoinColumn(name = "id_espetaculo", referencedColumnName = "id")
-    private Show espetaculo;
+
     @ManyToOne
     @JoinColumn(name = "id_utilizador", referencedColumnName = "id")
     private User user;
+    @ManyToOne
+    @JoinColumn(name = "id_espetaculo", referencedColumnName = "id")
+    private Show espetaculo;
 
     @OneToMany(mappedBy = "reservation")
     private Collection<SitsReservation> sits;
@@ -43,6 +44,18 @@ public class Reservation {
 
     public void setPago(Integer pago) {
         this.pago = pago;
+    }
+
+    public String getData_hora() {
+        return data_hora;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public Show getEspetaculo() {
+        return espetaculo;
     }
 
     @Override

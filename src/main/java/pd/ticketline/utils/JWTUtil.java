@@ -9,9 +9,7 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 
 public class JWTUtil {
-    private static final long EXPIRATION_MILLIS = 120000L; // 1 hour in milliseconds
-
-    // Use the Keys.secretKeyFor method to generate a secure key for HS256
+    private static final long EXPIRATION_MILLIS = 3600000L;  //120000L;
     private static final SecretKey SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS256);
 
     public static String generateToken(String username) {

@@ -1,6 +1,6 @@
 package pd.ticketline.server.rmiconnection;
 
-import pd.ticketline.rmi.BackupServiceRMI;
+import pd.ticketline.rmi.DatabaseListener;
 
 import java.io.IOException;
 import java.rmi.Remote;
@@ -8,11 +8,8 @@ import java.rmi.RemoteException;
 import java.sql.SQLException;
 
 public interface RemoteInterfaceServer extends Remote {
-
-    public void getDatabase() throws IOException, SQLException;
-    void registerBackupService(BackupServiceRMI rmi) throws RemoteException;
-    void unregisterBackupService(BackupServiceRMI rmi) throws RemoteException;
-
-
-    void updateDatabase(String query);
+    byte[] getDatabase() throws IOException, SQLException;
+    void registerBackupService(DatabaseListener rmi) throws RemoteException;
+    void unregisterBackupService(DatabaseListener rmi) throws RemoteException;
+    void notifyListeners(String query) throws RemoteException;
 }

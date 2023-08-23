@@ -14,17 +14,18 @@ import pd.ticketline.utils.JWTUtil;
 import pd.ticketline.utils.LoginUser;
 
 import java.rmi.RemoteException;
+import java.util.List;
 
 @Service
 public class UserService {
 
+    private final UserRepository userRepository;
+    private final DatabaseBackupImpl databaseBackup;
+
     @Autowired
-    private UserRepository userRepository;
-
-    DatabaseBackupImpl databaseBackup;
-
-    public UserService() throws RemoteException {
+    public UserService(UserRepository userRepository) throws RemoteException {
         this.databaseBackup = new DatabaseBackupImpl();
+        this.userRepository = userRepository;
     }
 
     public Auth auth(LoginUser auth){
@@ -42,25 +43,42 @@ public class UserService {
             throw new CustomException(e.getMessage(), HttpStatus.NOT_FOUND);
         }
         throw new CustomException("Bad Credentials", HttpStatus.FORBIDDEN);
-
     }
-    public String addUser(User user){
+    public User addUser(User user){
         try {
             User newUser = userRepository.save(user);
-            databaseBackup.updateDatabase("INSERT INTO utilizador VALUES (NULL, 0 '" + user.getName()+"','"+ user.getPassword()+"','"+user.getUsername() +"')");
-            return newUser.toString();
+            databaseBackup.notifyListeners("INSERT INTO utilizador (id, administrador, nome, password, username) VALUES (NULL, 0, '" + user.getName()+"','"+ user.getPassword()+"','"+user.getUsername() +"')");
+            return newUser;
         } catch (Exception e){
             throw new CustomException("User already exists or non-complete credentials.", HttpStatus.NOT_ACCEPTABLE);
         }
     }
-    public String editUser(EditUser user, HttpServletRequest request){
+
+    public void deleteUser(String username){
+        try{
+            User user = userRepository.findByUsername(username);
+            if (user == null) throw new CustomException("This user was deleted.", HttpStatus.NOT_FOUND);
+            userRepository.delete(user);
+            databaseBackup.notifyListeners("DELETE FROM utilizador WHERE username = '" + username + "'");
+        }catch (Exception e){
+            throw new CustomException("Couldn't delete the user.", HttpStatus.NOT_ACCEPTABLE);
+        }
+    }
+
+    public List<User> getAllUsers(){
+        return userRepository.findAllByAdministrador(0);
+    }
+
+    public User editUser(EditUser user, HttpServletRequest request){
         User userToUpdate = getUser(request);
         if (userToUpdate!=null){
             userToUpdate.setName(user.getName());
             userToUpdate.setPassword(user.getPassword());
-            return  userRepository.save(userToUpdate).toString();
+            User user1 = userRepository.save(userToUpdate);
+            databaseBackup.notifyListeners("UPDATE utilizador SET nome = '" + user.getName()+"', password = '"+ user.getPassword()+"' WHERE username ='"+ user1.getUsername()+"'");
+            return user1;
         } else {
-            throw new CustomException("User not found", HttpStatus.NOT_FOUND);
+            throw new CustomException("This user was deleted.", HttpStatus.NOT_FOUND);
         }
     }
 

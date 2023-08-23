@@ -1,5 +1,6 @@
 package pd.ticketline.server.service;
 
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -12,26 +13,38 @@ import pd.ticketline.server.repository.ReservationRepository;
 import pd.ticketline.server.repository.ShowRepository;
 import pd.ticketline.server.repository.SitRepository;
 import pd.ticketline.server.repository.SitsReservationRepository;
+import pd.ticketline.server.rmiconnection.DatabaseBackupImpl;
 
+import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 @Service
 public class SitService {
+    private final SitRepository sitRepository;
+    private final ShowRepository showRepository;
+    private final ReservationRepository reservationRepository;
+    private final SitsReservationRepository sitsReservationRepository;
+    private final DatabaseBackupImpl databaseBackup;
     @Autowired
-    private SitRepository sitRepository;
-    @Autowired
-    private ShowRepository showRepository;
-    @Autowired
-    private ReservationRepository reservationRepository;
-    @Autowired
-    private SitsReservationRepository sitsReservationRepository;
+    public SitService(SitRepository sitRepository, ShowRepository showRepository, ReservationRepository reservationRepository, SitsReservationRepository sitsReservationRepository) throws RemoteException {
+        this.sitRepository = sitRepository;
+        this.showRepository = showRepository;
+        this.reservationRepository = reservationRepository;
+        this.sitsReservationRepository = sitsReservationRepository;
+        this.databaseBackup = new DatabaseBackupImpl();
+    }
+    @Transactional
     public Sit addSit(Sit sit){
         try {
-            return sitRepository.save(sit);
+            Sit sit1 = sitRepository.save(sit);
+            databaseBackup.notifyListeners("INSERT INTO lugar (id, assento, fila, preco, espetaculo_id) VALUES " +
+                    "(NULL, '" + sit1.getAssento() +"', '" + sit1.getFila() +"', '" + sit1.getPreco()+"', '"
+                    +sit1.getEspetaculo().getId()+"')" );
+            return sit1;
         } catch (Exception e){
-            throw new CustomException("Unknown Error", HttpStatus.NOT_ACCEPTABLE);
+            throw new CustomException("Error inserting sits", HttpStatus.NOT_ACCEPTABLE);
         }
     }
 
@@ -53,8 +66,15 @@ public class SitService {
             throw new CustomException("Show with id " + id + " not found", HttpStatus.NOT_FOUND);
     }
 
+    @Transactional
     public void deleteSits(Show espetaculo){
-        List<Sit> sitEntities = sitRepository.findByEspetaculo(espetaculo);
-        sitRepository.deleteAll(sitEntities);
+        try {
+            List<Sit> sitEntities = sitRepository.findByEspetaculo(espetaculo);
+            sitRepository.deleteAll(sitEntities);
+            databaseBackup.notifyListeners("DELETE FROM lugar WHERE espetaculo_id="+espetaculo.getId());
+        }catch (Exception e){
+            throw new CustomException("Error deleting sits", HttpStatus.NOT_ACCEPTABLE);
+        }
+
     }
 }

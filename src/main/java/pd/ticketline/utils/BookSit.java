@@ -3,7 +3,6 @@ package pd.ticketline.utils;
 public class BookSit {
     private String fila;
     private String assento;
-
     private Integer espetaculo_id;
     private String data_hora;
 

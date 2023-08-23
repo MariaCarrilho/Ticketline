@@ -12,17 +12,21 @@ import pd.ticketline.utils.JWTUtil;
 import java.util.List;
 
 @RestController
+@RequestMapping("/sits")
 public class SitController {
+    private final SitService sitService;
+
     @Autowired
-    private SitService sitService;
-    @RequestMapping(value = "/sit/add", method = RequestMethod.POST)
+    public SitController(SitService sitService){
+        this.sitService = sitService;
+    }
+    @PostMapping("/add")
     public Sit createSit(@RequestBody Sit sit, HttpServletRequest request) {
         if(JWTUtil.isTokenValid(request))
             return sitService.addSit(sit);
         throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
     }
-
-    @RequestMapping(value = "/sits/{id}", method = RequestMethod.GET)
+    @GetMapping("/{id}")
     public List<Sit> getSits(@PathVariable Integer id, HttpServletRequest request) {
         if(JWTUtil.isTokenValid(request))
             return sitService.getSits(id);

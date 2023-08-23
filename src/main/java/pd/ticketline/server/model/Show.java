@@ -2,15 +2,18 @@ package pd.ticketline.server.model;
 
 import jakarta.persistence.*;
 
+import java.util.ArrayList;
+
 @Entity
 @Table(name = "espetaculo")
-public class Show {
+public class Show{
 
     public Show() {
         this.visivel = 0;
     }
 
-    public Show(Integer id, String descricao, String tipo, String data_hora, Integer duracao, String local, String localidade, String pais, String classificacao_etaria, Integer visivel) {
+    public Show(Integer id, String descricao, String tipo, String data_hora, Integer duracao, String local, String localidade, String pais, Integer classificacao_etaria, Integer visivel) {
+        this.id = id;
         this.descricao = descricao;
         this.tipo = tipo;
         this.data_hora = data_hora;
@@ -18,7 +21,7 @@ public class Show {
         this.local = local;
         this.localidade = localidade;
         this.pais = pais;
-        this.classificacao_etaria = classificacao_etaria;
+        this.classificacao_etaria = classificacao_etaria.toString();
         this.visivel = visivel;
     }
 
