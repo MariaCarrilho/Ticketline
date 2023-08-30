@@ -1,6 +1,7 @@
 package pd.ticketline.utils;
 
 import java.io.Serializable;
+import java.util.Objects;
 
 public class UnbookedReservations implements Serializable {
 
@@ -25,7 +26,20 @@ public class UnbookedReservations implements Serializable {
     public Integer getShow_id() {
         return show_id;
     }
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        UnbookedReservations that = (UnbookedReservations) o;
+        return fila.equals(that.fila) &&
+                assento.equals(that.assento) &&
+                show_id.equals(that.show_id);
+    }
 
+    @Override
+    public int hashCode() {
+        return  Objects.hash(fila, assento, show_id);
+    }
     @Override
     public String toString() {
         return "Lugar para o espetáculo " + show_id +

@@ -2,7 +2,9 @@ package pd.ticketline.server.exceptionhandler;
 
 import org.springframework.http.HttpStatus;
 
-public class ErrorDetails {
+import java.io.Serializable;
+
+public class ErrorDetails{
     private final String message;
     private final int code;
 
@@ -11,7 +13,6 @@ public class ErrorDetails {
         this.code = status.value();
     }
 
-    // Getters for message and code (you can add setters if needed)
     public String getMessage() {
         return message;
     }

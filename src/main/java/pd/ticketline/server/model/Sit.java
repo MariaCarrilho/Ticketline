@@ -6,7 +6,6 @@ import org.hibernate.annotations.OnDeleteAction;
 @Entity
 @Table(name = "lugar")
 public class Sit {
-    public Sit() {}
 
     @Column(nullable = false)
     @Id
@@ -22,6 +21,8 @@ public class Sit {
     @JoinColumn(name = "espetaculo_id", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Show espetaculo;
+
+    public Sit() {}
 
     public Integer getId() {
         return id;

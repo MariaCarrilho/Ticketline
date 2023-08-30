@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import pd.ticketline.server.model.Reservation;
 import pd.ticketline.server.exceptionhandler.CustomException;
+import pd.ticketline.server.model.SitsReservation;
 import pd.ticketline.server.service.ReservationService;
 import pd.ticketline.utils.BookSit;
 import pd.ticketline.utils.JWTUtil;
@@ -29,13 +30,13 @@ public class ReservationController {
         throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
     }
     @GetMapping("/paid")
-    public List<Reservation> getPaidReservations(HttpServletRequest request){
+    public List<SitsReservation> getPaidReservations(HttpServletRequest request){
         if(JWTUtil.isTokenValid(request))
             return reservationService.getReservationsByPaid(1, request);
         throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
     }
     @GetMapping("/unpaid")
-    public List<Reservation> getUnpaidReservations(HttpServletRequest request) {
+    public List<SitsReservation> getUnpaidReservations(HttpServletRequest request) {
         if (JWTUtil.isTokenValid(request))
             return reservationService.getReservationsByPaid(0, request);
         throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
@@ -47,7 +48,7 @@ public class ReservationController {
             reservationService.deleteUnpaidReservation(id, request);
         }else throw new CustomException("Unknown Error", HttpStatus.BAD_REQUEST);
     }
-    @GetMapping("{id}")
+    @PutMapping("{id}")
     public Reservation payReservation(@PathVariable Integer id, HttpServletRequest request){
         if (JWTUtil.isTokenValid(request)) {
             return reservationService.payReservation(id, request);

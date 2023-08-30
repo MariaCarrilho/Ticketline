@@ -32,20 +32,23 @@ public class DatabaseBackupImpl extends UnicastRemoteObject implements RemoteInt
         return Files.readAllBytes(databaseFile.toPath());
     }
 
-    public synchronized void registerBackupService(DatabaseListener rmi) throws RemoteException {
+    public synchronized void registerBackupService
+            (DatabaseListener rmi) throws RemoteException {
         System.out.println("Adding listener - " + rmi);
         list.add(rmi);
     }
 
-    public synchronized void unregisterBackupService(DatabaseListener rmi) throws RemoteException {
+    public synchronized void unregisterBackupService
+            (DatabaseListener rmi) throws RemoteException, SQLException {
         System.out.println("Removing listener - " + rmi);
+        rmi.endListener();
         list.remove(rmi);
-
     }
 
-    public void unregisterAllServices() throws RemoteException {
-        for(int i =0; i<list.size();i++) {
-            unregisterBackupService(list.get(i));
+    public void unregisterAllServices() throws RemoteException, SQLException {
+        List<DatabaseListener> copyOfList = new ArrayList<>(list);
+        for (DatabaseListener databaseListener : copyOfList) {
+            unregisterBackupService(databaseListener);
         }
     }
 

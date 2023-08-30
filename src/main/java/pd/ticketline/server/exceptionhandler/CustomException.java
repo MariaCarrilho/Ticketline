@@ -13,11 +13,14 @@ public class CustomException extends RuntimeException {
         this.status = status;
     }
 
+    public String getMessage() {
+        return message;
+    }
+
     public HttpStatus getStatus() {
         return this.status;
     }
 
-    // Getters for message and status (you can add setters if needed)
 }
 
 

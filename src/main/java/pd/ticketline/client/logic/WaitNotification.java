@@ -5,33 +5,37 @@ import pd.ticketline.utils.UnbookedReservations;
 
 import java.io.*;
 import java.net.Socket;
-import java.net.UnknownHostException;
 
 public class WaitNotification implements Runnable {
     private final String serverIP;
     private final int port;
-    public static boolean active = true;
+    public static boolean active;
+    private final String token;
 
-    public WaitNotification(String serverIP, int port) {
+    public WaitNotification(String serverIP, int port, String token) {
         this.serverIP = serverIP;
         this.port = port;
+        active = true;
+        this.token = token;
     }
 
     @Override
     public void run() {
         try {
-            Socket clientSocket = new Socket(serverIP, port);
             UnbookedReservations unbooked = null;
+            Socket clientSocket = new Socket(serverIP, port);
+            ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
+            oos.writeObject(token);
             while (active) {
                 if (clientSocket.getInputStream().available() > 0) {
-                    ObjectInputStream ois = new ObjectInputStream(clientSocket.getInputStream());
+                    ObjectInputStream ois =
+                            new ObjectInputStream(clientSocket.getInputStream());
                     Object receivedObject = ois.readObject();
                     if (receivedObject instanceof String response) {
-                        System.out.println(response);
+                        System.out.println("\n"+response+"\n");
                         if(response.equals("Server was terminated.")){
                             active = false;
                             ManagementUI.close();
-
                         }
                         if(response.equals("Este lugar está indisponível."))
                             APIRequests.unbookedReservations.remove(unbooked);

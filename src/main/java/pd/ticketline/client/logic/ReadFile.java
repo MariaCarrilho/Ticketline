@@ -4,7 +4,10 @@ import pd.ticketline.server.model.Show;
 import pd.ticketline.server.model.Sit;
 
 import java.io.BufferedReader;
+import java.io.FileInputStream;
 import java.io.FileReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 
 public class ReadFile {
     private final APIRequests apiRequests;
@@ -16,7 +19,7 @@ public class ReadFile {
 
     public void readShowInfo(String filename) throws Exception {
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(filename))){
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(filename), StandardCharsets.UTF_8))){
             String line;
             int lineNumber = 1;
             read:while ((line = reader.readLine()) != null) {

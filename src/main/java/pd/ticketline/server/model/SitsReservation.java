@@ -25,12 +25,10 @@ public class SitsReservation {
 
     @Override
     public String toString() {
-        return "SitsReservation{" +
-                "sit=" + sit +
-                ", reservation=" + reservation +
-                '}';
-    }
-
+        return "Reserva " + reservation.getId() + " feita às " + reservation.getData_hora()
+                + " para o espetáculo " + reservation.getEspetaculo().getDescricao() + " no lugar " +
+                sit.getAssento() + " na fila " + sit.getFila() +".";
+                }
     public Sit getSit() {
         return sit;
     }

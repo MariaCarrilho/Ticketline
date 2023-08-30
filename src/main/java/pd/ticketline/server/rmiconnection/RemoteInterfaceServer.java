@@ -10,6 +10,6 @@ import java.sql.SQLException;
 public interface RemoteInterfaceServer extends Remote {
     byte[] getDatabase() throws IOException, SQLException;
     void registerBackupService(DatabaseListener rmi) throws RemoteException;
-    void unregisterBackupService(DatabaseListener rmi) throws RemoteException;
+    void unregisterBackupService(DatabaseListener rmi) throws RemoteException, SQLException;
     void notifyListeners(String query) throws RemoteException;
 }

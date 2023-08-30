@@ -11,6 +11,5 @@ import java.util.List;
 public interface UserRepository extends JpaRepository<User, String> {
     User findByUsername(@Param("username") String username);
     User findById(@Param("id") Integer id);
-
     List<User> findAllByAdministrador(@Param("id") Integer id);
 }

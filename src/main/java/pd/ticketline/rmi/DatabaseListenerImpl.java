@@ -15,10 +15,13 @@ public class DatabaseListenerImpl extends UnicastRemoteObject implements Databas
     private Connection dbConn;
     private final RemoteInterfaceServer remoteRef;
 
+    private volatile boolean active;
+
     public DatabaseListenerImpl(String dbPath, RemoteInterfaceServer remoteRef) throws RemoteException {
         super();
         this.dbPath = dbPath;
         this.remoteRef = remoteRef;
+        active = true;
     }
 
 
@@ -52,13 +55,21 @@ public class DatabaseListenerImpl extends UnicastRemoteObject implements Databas
         }
     }
 
+
+
     @Override
     public void endListener() throws RemoteException, SQLException {
         close();
-        UnicastRemoteObject.unexportObject(remoteRef, true);
-        System.exit(0);
+        setActive(false);
     }
 
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
 
     private void close() throws SQLException
     {

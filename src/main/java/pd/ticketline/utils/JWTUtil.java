@@ -3,18 +3,21 @@ import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
+import pd.ticketline.server.clientconnection.TCPServer;
 import pd.ticketline.server.exceptionhandler.CustomException;
 
 import javax.crypto.SecretKey;
+import java.io.IOException;
 import java.util.Date;
 
 public class JWTUtil {
-    private static final long EXPIRATION_MILLIS = 3600000L;  //120000L;
-    private static final SecretKey SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-
+    private static final long EXPIRATION_MILLIS = 120000L;
+    private static final SecretKey SECRET_KEY =
+            Keys.secretKeyFor(SignatureAlgorithm.HS256);
     public static String generateToken(String username) {
         Date now = new Date();
-        Date expiration = new Date(now.getTime() + EXPIRATION_MILLIS);
+        Date expiration = new Date(now.getTime()
+                + EXPIRATION_MILLIS);
 
         return Jwts.builder()
                 .setSubject(username)
@@ -23,10 +26,13 @@ public class JWTUtil {
                 .signWith(SECRET_KEY)
                 .compact();
     }
+    public static String getToken(HttpServletRequest request){
+        String authorizationHeader = request.getHeader("Authorization");
+        return authorizationHeader.substring(7);
+    }
 
     public static String extractUsernameFromToken(HttpServletRequest request) {
-        String authorizationHeader = request.getHeader("Authorization");
-        String token = authorizationHeader.substring(7);
+        String token = getToken(request);
         Claims claims = Jwts.parser()
                 .setSigningKey(SECRET_KEY)
                 .parseClaimsJws(token)
@@ -38,7 +44,7 @@ public class JWTUtil {
         String authorizationHeader = request.getHeader("Authorization");
 
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
-            String token = authorizationHeader.substring(7); // Extract token without "Bearer " prefix
+            String token = authorizationHeader.substring(7);
 
             return validateToken(token);
         }
@@ -52,9 +58,15 @@ public class JWTUtil {
                     .setSigningKey(SECRET_KEY)
                     .parseClaimsJws(token);
 
+            if(!claimsJws.getBody().getExpiration().after(new Date())) {
+                TCPServer.removeClient(token);
+                throw new CustomException("Token expired, login again.", HttpStatus.UNAUTHORIZED);
+            }
+
             return true;
         } catch (Exception ex) {
-            throw new CustomException("Invalid or expired token.", HttpStatus.UNAUTHORIZED);
+            TCPServer.removeClient(token);
+            throw new CustomException("Token expired, login again.", HttpStatus.UNAUTHORIZED);
         }
     }
 }

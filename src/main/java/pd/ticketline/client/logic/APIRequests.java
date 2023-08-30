@@ -2,15 +2,10 @@ package pd.ticketline.client.logic;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import org.json.JSONObject;
 import org.springframework.http.*;
-import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
-import pd.ticketline.server.model.Reservation;
-import pd.ticketline.server.model.User;
+import pd.ticketline.server.model.*;
 import pd.ticketline.utils.*;
-import pd.ticketline.server.model.Show;
-import pd.ticketline.server.model.Sit;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,10 +16,10 @@ public class APIRequests {
     private static String serverIp;
     private String token;
     private boolean admin;
-    private Thread waitNotification;
+    private static Thread thread;
+    private static WaitNotification waitNotification;
     public final static ArrayList<UnbookedReservations> unbookedReservations = new ArrayList<>();
     private final RestTemplate restTemplate;
-
     public APIRequests(String serverIP) {
         this.restTemplate = new RestTemplate();
         APIRequests.serverIp = serverIP;
@@ -47,16 +42,12 @@ public class APIRequests {
         }
     }
 
-    private String parseJSon(Exception e) throws Exception {
-        int startIndex = e.getMessage().indexOf('{');
-        String jsonPart = e.getMessage().substring(startIndex);
-        JSONObject jsonObject = new JSONObject(jsonPart);
-        String msg = jsonObject.getString("message");
-        if(msg.equals("Invalid or expired token."))
-            throw new Exception("Token expired, login again.");
-        else if(msg.equals("This user was deleted."))
-            throw new Exception(msg);
-        return jsonObject.getString("message");
+    private String parseJSon(Exception e) {
+        if(e.getMessage().contains("401")) return ("Token expired, login again.");
+        int startIndex = e.getMessage().indexOf("\"message\":\"") + "\"message\":\"".length();
+        int endIndex = e.getMessage().indexOf("\"", startIndex);
+
+        return e.getMessage().substring(startIndex, endIndex);
     }
     private HttpHeaders getAuthorizationHeader(){
         HttpHeaders headers = new HttpHeaders();
@@ -71,21 +62,23 @@ public class APIRequests {
             this.token = auth.getToken();
             this.admin = auth.isAdmin();
             return "You are now authenticated!";
-        }catch (HttpClientErrorException e){
-            return parseJSon(e);
+        }catch (Exception e){
+            throw new Exception(parseJSon(e));
+
         }
     }
 
-    public void getTCPPort() {
+    public void getTCPPort() throws Exception {
         HttpHeaders headers = getAuthorizationHeader();
-        ResponseEntity<String> response = restTemplate.exchange(apiUrl+ "/getPort", HttpMethod.GET,new HttpEntity<>(headers),String.class);
+        ResponseEntity<String> response = restTemplate.exchange(apiUrl+ "/getPort"
+                , HttpMethod.GET,new HttpEntity<>(headers),String.class);
         String port = response.getBody();
         try {
-            this.waitNotification = new Thread(new WaitNotification(serverIp, Integer.parseInt(port)));
-            this.waitNotification.start();
-            WaitNotification.active = true;
+            waitNotification = new WaitNotification(serverIp, Integer.parseInt(port), token);
+            thread = new Thread(waitNotification);
+            thread.start();
         }catch (Exception e){
-            System.out.println(e.getMessage());
+            throw new Exception(parseJSon(e));
         }
 
     }
@@ -96,27 +89,30 @@ public class APIRequests {
             user = restTemplate.postForObject(apiUrl + "/users/add", user, User.class);
             return user.toString();
         }catch (Exception e){
-            return parseJSon(e);
+            throw new Exception(parseJSon(e));
+
         }
     }
 
     public String editUser(EditUser user) throws Exception {
         HttpHeaders headers = getAuthorizationHeader();
         try{
-            ResponseEntity<User> response = restTemplate.exchange(apiUrl+ "/users", HttpMethod.PUT,new HttpEntity<>(user, headers),User.class);
+            ResponseEntity<User> response = restTemplate.exchange
+                    (apiUrl+ "/users", HttpMethod.PUT,
+                            new HttpEntity<>(user, headers),User.class);
             return response.getBody().toString();
         }catch (Exception e){
-            return parseJSon(e);
+            throw new Exception(parseJSon(e));
         }
     }
     public String editShow(Show show) throws Exception {
         HttpHeaders headers = getAuthorizationHeader();
         try{
-            System.out.println(show.toString());
             ResponseEntity<Show> response = restTemplate.exchange(apiUrl+ "/shows", HttpMethod.PUT,new HttpEntity<>(show, headers),Show.class);
             return response.getBody().toString();
         }catch (Exception e){
-            return parseJSon(e);
+            throw new Exception(parseJSon(e));
+
         }
     }
 
@@ -126,8 +122,8 @@ public class APIRequests {
             ResponseEntity<Show> response = restTemplate.exchange(apiUrl+ "/shows/add", HttpMethod.POST,new HttpEntity<>(showInfo, headers),Show.class);
             return response.getBody().getId();
         }catch (Exception e){
-            System.out.println(parseJSon(e));
-            return -1;
+            throw new Exception(parseJSon(e));
+
         }
     }
     public String deleteShow(int id) throws Exception {
@@ -136,7 +132,8 @@ public class APIRequests {
             restTemplate.exchange(apiUrl+ "/shows/"+id, HttpMethod.DELETE,new HttpEntity<>(headers),Show.class);
             return "Show with id " + id + " deleted.";
         }catch (Exception e){
-            return parseJSon(e);
+            throw new Exception(parseJSon(e));
+
         }
     }
 
@@ -146,7 +143,8 @@ public class APIRequests {
             restTemplate.exchange(apiUrl+ "/users/"+username, HttpMethod.DELETE , new HttpEntity<>(headers), User.class);
             return "User with username " + username + " deleted.";
         }catch (Exception e){
-            return parseJSon(e);
+            throw new Exception(parseJSon(e));
+
         }
     }
 
@@ -155,7 +153,8 @@ public class APIRequests {
         try{
             restTemplate.exchange(apiUrl+ "/sits/add", HttpMethod.POST,new HttpEntity<>(sit, headers),Sit.class);
         }catch (Exception e){
-            System.out.println(parseJSon(e));
+            throw new Exception(parseJSon(e));
+
         }
     }
 
@@ -163,9 +162,9 @@ public class APIRequests {
         HttpHeaders headers = getAuthorizationHeader();
         try{
             restTemplate.exchange(apiUrl+ "/reservations/"+id, HttpMethod.DELETE,new HttpEntity<>(headers),Show.class);
-            return "Reserva com id " + id + "apagada.";
+            return "Reserva com id " + id + " apagada.";
         }catch (Exception e){
-            return parseJSon(e);
+            throw new Exception(parseJSon(e));
         }
     }
 
@@ -173,57 +172,58 @@ public class APIRequests {
         try {
             return new ArrayList<>(Arrays.asList(restTemplate.getForObject(apiUrl+ "/shows",Show[].class)));
         }catch (Exception e){
-            System.out.println(parseJSon(e));
-            return new ArrayList<>();
+            throw new Exception(parseJSon(e));
+
         }
     }
 
-    public ArrayList<Sit> getSits(int id) {
+    public ArrayList<Sit> getSits(int id) throws Exception {
         HttpHeaders headers = getAuthorizationHeader();
         try {
             ResponseEntity<Sit[]> responseEntity = restTemplate.exchange(apiUrl+ "/sits/"+id,HttpMethod.GET, new HttpEntity<>(headers) ,Sit[].class);
             return new ArrayList<>(Arrays.asList(responseEntity.getBody()));
 
         }catch (Exception e){
-            return new ArrayList<>();
+            throw new Exception(parseJSon(e));
+
         }
     }
 
-    public ArrayList<Show> getCriteriaShows(Search search){
+    public ArrayList<Show> getCriteriaShows(Search search) throws Exception {
         try {
             return new ArrayList<>(Arrays.asList(Objects.requireNonNull(restTemplate.getForObject(apiUrl + "/shows/" + search.getCriterio() + "/" + search.getPesquisa(), Show[].class))));
         }catch (Exception e){
-            return new ArrayList<>();
+            throw new Exception(parseJSon(e));
+
         }
     }
 
-    public ArrayList<Reservation> checkUnpaidReservations() throws Exception {
+    public ArrayList<SitsReservation> checkUnpaidReservations() throws Exception {
         try{
             HttpHeaders headers = getAuthorizationHeader();
-            ResponseEntity<Reservation[]> response = restTemplate.exchange(
+            ResponseEntity<SitsReservation[]> response = restTemplate.exchange(
                 apiUrl + "/reservations/unpaid",
                 HttpMethod.GET,
                 new HttpEntity<>(headers),
-                Reservation[].class);
+                    SitsReservation[].class);
             return new ArrayList<>(Arrays.asList(Objects.requireNonNull(response.getBody())));
         }catch (Exception e){
-            System.out.println(parseJSon(e));
-            return new ArrayList<>();
+            throw new Exception(parseJSon(e));
+
         }
     }
 
-    public ArrayList<Reservation> checkPaidReservations() throws Exception {
+    public ArrayList<SitsReservation> checkPaidReservations() throws Exception {
         try{
             HttpHeaders headers = getAuthorizationHeader();
-            ResponseEntity<Reservation[]> response = restTemplate.exchange(
+            ResponseEntity<SitsReservation[]> response = restTemplate.exchange(
                 apiUrl + "/reservations/paid",
                 HttpMethod.GET,
                 new HttpEntity<>(headers),
-                Reservation[].class);
+                    SitsReservation[].class);
         return new  ArrayList<>(Arrays.asList(Objects.requireNonNull(response.getBody())));
     }catch (Exception e){
-        System.out.println(parseJSon(e));
-        return new ArrayList<>();
+            throw new Exception(parseJSon(e));
     }
     }
 
@@ -231,10 +231,13 @@ public class APIRequests {
     public String payReservation(int id) throws Exception {
         HttpHeaders headers = getAuthorizationHeader();
         try{
-            ResponseEntity<Reservation> response = restTemplate.exchange(apiUrl+ "/reservations/"+id, HttpMethod.GET,new HttpEntity<>(headers), Reservation.class);
+            ResponseEntity<Reservation> response = restTemplate.exchange
+                    (apiUrl+ "/reservations/"+id, HttpMethod.PUT,
+                            new HttpEntity<>(headers),Reservation.class);
             return response.getBody().toString() + " foi paga.";
         }catch (Exception e){
-            return parseJSon(e);
+            throw new Exception(parseJSon(e));
+
         }
 
     }
@@ -245,7 +248,8 @@ public class APIRequests {
             ResponseEntity<Reservation> response = restTemplate.exchange(apiUrl+ "/reservations", HttpMethod.POST,new HttpEntity<>(bookSit,headers), Reservation.class);
             return response.getBody().toString();
         }catch (Exception e){
-            return parseJSon(e);
+            throw new Exception(parseJSon(e));
+
         }
     }
 
@@ -253,9 +257,10 @@ public class APIRequests {
         return admin;
     }
 
-    public void endThread() throws InterruptedException {
-        WaitNotification.active = false;
-        this.waitNotification.join();
+
+    public static void endThread() throws InterruptedException {
+        waitNotification.active = false;
+        thread.join(1000);
     }
 
     public ArrayList<User> getAllUsers() throws Exception {
@@ -263,8 +268,7 @@ public class APIRequests {
         try {
             return new ArrayList<>(Arrays.asList(restTemplate.exchange(apiUrl+ "/users", HttpMethod.GET ,new HttpEntity<>(headers), User[].class).getBody()));
         }catch (Exception e){
-            System.out.println(parseJSon(e));
-            return new ArrayList<>();
+            throw new Exception(parseJSon(e));
         }
     }
 }

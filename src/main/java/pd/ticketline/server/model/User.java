@@ -9,18 +9,16 @@ public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
-
-    @Column(name = "administrador", nullable = false, columnDefinition = "INTEGER default 0")
+    @Column(name = "administrador", nullable = false,
+            columnDefinition = "INTEGER default 0")
     private Integer administrador;
     @Column(name = "username", unique = true, nullable = false)
     private String username;
-
     @Column(name = "nome", nullable = false)
     private String nome;
 
     @Column(name = "password", nullable = false)
     private String password;
-
     public User(String username, String name, String password) {
         this.username = username;
         this.nome = name;

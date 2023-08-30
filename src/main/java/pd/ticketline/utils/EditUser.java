@@ -1,8 +1,8 @@
 package pd.ticketline.utils;
 
 public class EditUser {
-    private String name;
-    private String password;
+    private final String name;
+    private final String password;
 
     public EditUser(String name, String password) {
         this.name = name;

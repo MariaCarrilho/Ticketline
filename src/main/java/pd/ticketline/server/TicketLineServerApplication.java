@@ -26,10 +26,8 @@ import java.util.Scanner;
 @SpringBootApplication
 @EnableJpaRepositories
 public class TicketLineServerApplication extends SpringBootServletInitializer {
-    private static int count =0;
-
     private static String getValidDatabaseFile(String arg){
-        String dbDir = arg.replace("--spring.datasource.url=jdbc:sqlite:", "");
+        String dbDir = arg;
         Path path = Paths.get(dbDir);
         if (Files.isDirectory(path)){
             File[] filesInDirectory = new File(dbDir).listFiles();
@@ -42,8 +40,7 @@ public class TicketLineServerApplication extends SpringBootServletInitializer {
                     }
                 }
             }
-            dbDir = path + "\\ticketline_"+ count + ".db";
-            count++;
+            dbDir = path + "\\server_ticketline_0.db";
             System.out.println("Creating database at " + dbDir );
             return dbDir;
         }
@@ -53,13 +50,14 @@ public class TicketLineServerApplication extends SpringBootServletInitializer {
         }
         return null;
     }
-
     public static void main(String[] args) throws IOException, InterruptedException {
 
         SpringApplication app = new SpringApplication(TicketLineServerApplication.class);
 
+        args[0] = args[0].replace("--spring.datasource.url=jdbc:sqlite:", "");
         String validDatabase = getValidDatabaseFile(args[0]);
         if(validDatabase==null) return;
+
         args[0] = "--spring.datasource.url=jdbc:sqlite:"+validDatabase;
         ConfigurableApplicationContext context = app.run(args);
 
@@ -74,7 +72,7 @@ public class TicketLineServerApplication extends SpringBootServletInitializer {
         sc.nextLine();
 
         context.close();
-        tcpServer.sendMessageToAllClients("Server was terminated.");
+        tcpServer.sendMessageToAllClients("Server was terminated.", null);
         TCPServer.stop();
         serverThread.join();
         registerHandler.deleteRegistry();

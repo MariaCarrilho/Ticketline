@@ -1,13 +1,9 @@
 package pd.ticketline.client.ui;
 
-import org.json.JSONException;
 import pd.ticketline.client.logic.APIRequests;
 import pd.ticketline.client.logic.ReadFile;
-import pd.ticketline.server.model.Reservation;
-import pd.ticketline.server.model.User;
+import pd.ticketline.server.model.*;
 import pd.ticketline.utils.UnbookedReservations;
-import pd.ticketline.server.model.Show;
-import pd.ticketline.server.model.Sit;
 import pd.ticketline.utils.BookSit;
 import pd.ticketline.utils.EditUser;
 import pd.ticketline.utils.Search;
@@ -19,11 +15,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class ManagementUI {
 
-    private static boolean finish = false;
-    private static boolean auth = false;
+    private static volatile boolean finish = false;
+    private static volatile boolean auth = false;
     private final APIRequests apiRequests;
 
     public ManagementUI(String apiURL) {
@@ -88,12 +85,13 @@ public class ManagementUI {
 
     private void bookChoosenSits() throws InterruptedException {
         try{
-            int i = 1;
+
             if (APIRequests.unbookedReservations.isEmpty()) System.out.println("You have nothing in your cart.");
             else {
+                int i = 0;
                 for (UnbookedReservations unbooked : APIRequests.unbookedReservations) {
-                    System.out.println("Reserva: " + i + " -> " + unbooked.toString());
                     i++;
+                    System.out.println("Reserva: " + i + " -> " + unbooked.toString());
                 }
                 String reserva = Input.readString("Reservar? ", true);
                 if (reserva.equals("sim")) {
@@ -106,7 +104,6 @@ public class ManagementUI {
                     String formattedDate = dateFormat.format(new Date());
                     BookSit bookSit = new BookSit(APIRequests.unbookedReservations.get(id-1).getFila(), APIRequests.unbookedReservations.get(id-1).getAssento(), APIRequests.unbookedReservations.get(id-1).getShow_id(), formattedDate);
                     System.out.println(this.apiRequests.bookSit(bookSit));
-                    APIRequests.unbookedReservations.remove(id-1);
                 }
             }
         }catch (Exception e){
@@ -145,15 +142,20 @@ public class ManagementUI {
 
                 String reserva = Input.readString("Adicionar ao cesto? ", true);
                 if (reserva.equalsIgnoreCase("sim")) {
-                    String filaReservar = null;
-                    String assentoReservar = null;
+                    String filaReservar;
+                    String assentoReservar;
                     do {
                         filaReservar = Input.readString("Fila:", true).toUpperCase();
                     } while (!filaLugares.containsKey(filaReservar));
                     do {
                         assentoReservar = Input.readString("Assento:", true);
                     } while (!filaLugares.get(filaReservar).contains(assentoReservar));
-                    APIRequests.unbookedReservations.add(new UnbookedReservations(filaReservar, assentoReservar, id));
+                    if(!APIRequests.unbookedReservations.contains(new UnbookedReservations(filaReservar, assentoReservar, id))) {
+                        APIRequests.unbookedReservations.add(new UnbookedReservations(filaReservar, assentoReservar, id));
+                        System.out.println("Lugar adicionado ao carrinho.");
+                    }else{
+                        System.out.println("Nothing was added, you already added this sit.");
+                    }
                 }
             }
         }catch (Exception e){
@@ -166,10 +168,10 @@ public class ManagementUI {
 
     private void checkPaidReservations() throws InterruptedException {
         try{
-            ArrayList<Reservation> parts = this.apiRequests.checkPaidReservations();
+            ArrayList<SitsReservation> parts = this.apiRequests.checkPaidReservations();
             if (parts.isEmpty()) System.out.println("You don't have paid bookings.");
             else {
-                for (Reservation part : parts) System.out.println(part.toString());
+                for (SitsReservation part : parts) System.out.println(part.toString());
             }
         }catch (Exception e){
             System.out.println(e.getMessage());
@@ -179,10 +181,10 @@ public class ManagementUI {
 
     private void checkUnpaidReservations() throws InterruptedException {
         try{
-            ArrayList<Reservation> parts = this.apiRequests.checkUnpaidReservations();
+            ArrayList<SitsReservation> parts = this.apiRequests.checkUnpaidReservations();
             if (parts.isEmpty()) System.out.println("You don't have unpaid bookings.");
             else {
-                for (Reservation part : parts) System.out.println(part.toString());
+                for (SitsReservation part : parts) System.out.println(part.toString());
                 switch (Input.chooseOption("======== Opções ========", "Eliminar Reserva",
                         "Pagar Reserva", "Cancelar")) {
                     case 1 -> deleteUnpaidReservation();
@@ -301,9 +303,13 @@ public class ManagementUI {
         }
         return availableShows;
     }
-    private int consAllShow() throws Exception {
-        System.out.println("These are the shows available:");
-        return showShows(this.apiRequests.getShows());
+    private int consAllShow() {
+        try {
+            return showShows(this.apiRequests.getShows());
+        }catch (Exception e){
+            System.out.println(e.getMessage());
+        }
+        return -1;
     }
 
     public String criterioConsulta(){
@@ -348,61 +354,77 @@ public class ManagementUI {
             showShows(this.apiRequests.getCriteriaShows(search));
         }
     }
-    private void adicUser() throws Exception {
-        int numAlunos = Input.readInt("\nQuantos utilizadores pretende criar? ");
-        for (int i = 0 ; i < numAlunos; i++) {
-            System.out.println();
-            String nome = Input.readString("Nome: ",false);
-            String username = Input.readString("Username: ",true);
-            String password = Input.readString("Password: ",true);
-            System.out.println();
-            String response = apiRequests.adicUser(nome, username, password);
-            if(response.equals("User already exists or non-complete credentials.")) System.out.println(response);
-            else System.out.println("Foi criado o utilizador " + response);
+    private void adicUser() {
+        try{
+            int numAlunos = Input.readInt("\nQuantos utilizadores pretende criar? ");
+            for (int i = 0; i < numAlunos; i++) {
+                System.out.println();
+                String nome = Input.readString("Nome: ", false);
+                String username = Input.readString("Username: ", true);
+                String password = Input.readString("Password: ", true);
+                System.out.println();
+                String response = apiRequests.adicUser(nome, username, password);
+                if (response.equals("User already exists or non-complete credentials.")) System.out.println(response);
+                else System.out.println("Foi criado o utilizador " + response);
+            }
+        }catch (Exception e){
+            System.out.println(e.getMessage());
         }
     }
     private void logout() throws InterruptedException {
         auth = false;
-        this.apiRequests.endThread();
+        APIRequests.endThread();
     }
     private void editUser() throws InterruptedException {
         try{
             String name = Input.readString("Nome: ", false);
             String password = Input.readString("Password: ", true);
-            System.out.println("Foi alterado o utilizador " + this.apiRequests.editUser(new EditUser(name, password)));
+            System.out.println("Foi alterado o utilizador "
+                    + this.apiRequests.editUser(new EditUser(name, password)));
         }catch (Exception e){
             System.out.println(e.getMessage());
-            if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
+            if(e.getMessage().equals("Token expired, login again.")
+                    || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
 
-    private void login() throws Exception {
-
-        String username = Input.readString("Username: ",true);
-        String password = Input.readString("Password: ",true);
+    private void login() {
+    try {
+        String username = Input.readString("Username: ", true);
+        String password = Input.readString("Password: ", true);
         String response = apiRequests.auth(username, password);
         System.out.println(response);
-        if(response.equals("You are now authenticated!")) {
+        if (response.equals("You are now authenticated!")) {
             auth = true;
             apiRequests.getTCPPort();
-            if(apiRequests.isAdmin()) adminOptions();
+            if (apiRequests.isAdmin()) adminOptions();
             else normalOptions();
         }
+    }catch (Exception e){
+        System.out.println(e.getMessage());
+    }
     }
 
     private int showShows(ArrayList<Show> showEntities){
         if (showEntities.isEmpty()){
             System.out.println("No shows found.");
             return 0;
-        }else {
-            for (Show entity : showEntities) {
-                if (entity.getVisivel() == 1 || apiRequests.isAdmin())
-                    System.out.println(entity);
-            }
-            return 1;
         }
+        if(apiRequests.isAdmin()){
+            System.out.println("These are the shows available:");
+            for (Show entity : showEntities) System.out.println(entity+"\n");
+            return 1;
+        }else{
+            ArrayList<Show> aux = new ArrayList<>(showEntities.stream().filter(show ->show.getVisivel()==1).collect(Collectors.toList()));
+            if(!aux.isEmpty()) {
+                for (Show entity : aux) System.out.println(entity + "\n");
+                return 1;
+            } else System.out.println("No shows found.");
+            return 0;
+        }
+
     }
-    private void alterShow() {
+    private void alterShow(){
         switch (Input.chooseOption("======== Alterar Espetáculo ========","Alterar Detalhes","Alterar Visibilidade", "Cancelar")) {
             case 1 -> editAllShowInfo();
             case 2 -> editShowVisibility();
@@ -415,6 +437,7 @@ public class ManagementUI {
             String fileName = Input.readString("Nome do Ficheiro: ", true);
             readFile.readShowInfo(fileName);
         }catch (Exception e){
+            System.out.println(e.getMessage());
             if(e.getMessage().equals("Token expired, login again.") || e.getMessage().equals("This user was deleted.") ) logout();
         }
     }
@@ -432,7 +455,7 @@ public class ManagementUI {
         ArrayList<User> allUsers = this.apiRequests.getAllUsers();
         try{
             if(allUsers.isEmpty()) return;
-            for(User user: allUsers) System.out.println(user.toString());
+            for(User user: allUsers) System.out.println(user.toString() + "\n");
             String username = Input.readString("Username:", true);
             System.out.println(this.apiRequests.deleteUser(username));
         }catch (Exception e){
@@ -442,8 +465,10 @@ public class ManagementUI {
     }
 
     public static void close() throws InterruptedException {
-        finish=true;
+
         auth=false;
+        finish=true;
+        APIRequests.endThread();
     }
 
 }

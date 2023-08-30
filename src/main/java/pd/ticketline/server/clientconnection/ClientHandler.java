@@ -18,13 +18,11 @@ public class ClientHandler {
             oos.writeObject(message);
 
         } catch (IOException e) {
+            System.out.println("Removing Client String");
             removeClient();
         }
     }
 
-    public Socket getClientSocket() {
-        return clientSocket;
-    }
 
     public void removeClient() throws IOException {
         clientSocket.close();
@@ -36,7 +34,7 @@ public class ClientHandler {
             oos.writeObject(unbookedReservations);
 
         } catch (IOException e) {
-            System.out.println("Removing Client");
+            System.out.println("Removing Client Object");
             removeClient();
         }
     }

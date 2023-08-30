@@ -4,6 +4,7 @@ import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import pd.ticketline.server.clientconnection.TCPServer;
 import pd.ticketline.server.model.Reservation;
 import pd.ticketline.server.model.Show;
 import pd.ticketline.server.model.Sit;
@@ -27,6 +28,8 @@ public class SitService {
     private final ReservationRepository reservationRepository;
     private final SitsReservationRepository sitsReservationRepository;
     private final DatabaseBackupImpl databaseBackup;
+    private final TCPServer tcpServer;
+
     @Autowired
     public SitService(SitRepository sitRepository, ShowRepository showRepository, ReservationRepository reservationRepository, SitsReservationRepository sitsReservationRepository) throws RemoteException {
         this.sitRepository = sitRepository;
@@ -34,6 +37,7 @@ public class SitService {
         this.reservationRepository = reservationRepository;
         this.sitsReservationRepository = sitsReservationRepository;
         this.databaseBackup = new DatabaseBackupImpl();
+        this.tcpServer = new TCPServer();
     }
     @Transactional
     public Sit addSit(Sit sit){
@@ -53,13 +57,14 @@ public class SitService {
         if(optionalShow.isPresent()) {
             List<Sit> allSits = sitRepository.findByEspetaculo(optionalShow.get());
             List<Reservation> reservationsShows = reservationRepository.findByEspetaculo(optionalShow.get());
-            List<Sit> availableSits = new ArrayList<>();
+            List<Sit> availableSits = new ArrayList<>(allSits);
             for(Sit sit: allSits){
                 SitsReservation isSitReserved =null;
                 for(Reservation reservation:reservationsShows) {
                     isSitReserved = sitsReservationRepository.findSitsReservationEntitiesBySitAndReservation(sit, reservation);
+                    if(isSitReserved!=null) availableSits.remove(sit);
+
                 }
-                if(isSitReserved==null) availableSits.add(sit);
             }
             return availableSits;
         }else
